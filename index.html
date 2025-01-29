@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Feedback Reminder</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#4a90e2" />
+    <link rel="manifest" href="manifest.json" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .custom-shadow {
+        box-shadow: 0 4px 6px rgba(74, 144, 226, 0.25);
+      }
+      .transition-all {
+        transition: all 0.3s ease;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-md">
+      <!-- Header -->
+      <header class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Feedback Reminder</h1>
+        <p class="text-gray-600">Set reminders for your class feedback</p>
+      </header>
+
+      <!-- Main Form -->
+      <div class="bg-white rounded-lg p-6 shadow-lg mb-6">
+        <form id="reminderForm" class="space-y-4" target="hidden-iframe">
+          <div>
+            <label
+              for="className"
+              class="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Class Name
+            </label>
+            <input
+              type="text"
+              id="className"
+              name="className"
+              placeholder="Enter class name"
+              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              required
+            />
+          </div>
+
+          <div>
+            <label
+              for="classTime"
+              class="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Class Time
+            </label>
+            <input
+              type="datetime-local"
+              id="classTime"
+              name="classTime"
+              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              required
+            />
+          </div>
+
+          <div class="flex space-x-4 pt-4">
+            <button
+              type="submit"
+              class="flex-1 bg-blue-500 text-white px-6 py-2 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
+            >
+              Set Reminder
+            </button>
+            <button
+              type="button"
+              id="submitFeedbackBtn"
+              class="flex-1 bg-green-500 text-white px-6 py-2 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all"
+            >
+              Submit Feedback
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Status Messages -->
+      <div id="statusMessage" class="hidden rounded-md p-4 mb-4"></div>
+
+      <!-- Notification Status -->
+      <div class="bg-white rounded-lg p-4 shadow-lg">
+        <h2 class="text-lg font-semibold text-gray-800 mb-2">
+          Notification Status
+        </h2>
+        <p id="notificationStatus" class="text-gray-600">
+          Checking notification permissions...
+        </p>
+      </div>
+
+      <!-- Hidden iframe for form submission -->
+      <iframe
+        name="hidden-iframe"
+        id="hidden-iframe"
+        style="display: none"
+      ></iframe>
+    </div>
+
+    <script>
+      const SCRIPT_URL =
+        "https://script.google.com/macros/s/AKfycbxoViX2o7eHC7rMac62w4v2N7zPwp4qu9FAduw6qwmtT-jMJtbDajlY0pUuaqP8hQch3Q/exec";
+
+      // Update notification status display
+      function updateNotificationStatus() {
+        const statusElement = document.getElementById("notificationStatus");
+        if (!("Notification" in window)) {
+          statusElement.textContent =
+            "Notifications are not supported in this browser";
+          statusElement.className = "text-red-600";
+        } else {
+          switch (Notification.permission) {
+            case "granted":
+              statusElement.textContent = "Notifications are enabled";
+              statusElement.className = "text-green-600";
+              break;
+            case "denied":
+              statusElement.textContent =
+                "Notifications are blocked. Please enable them in your browser settings.";
+              statusElement.className = "text-red-600";
+              break;
+            default:
+              statusElement.textContent =
+                "Please enable notifications for reminders";
+              statusElement.className = "text-blue-600";
+          }
+        }
+      }
+
+      // Show status message
+      function showStatus(message, isError = false) {
+        const statusDiv = document.getElementById("statusMessage");
+        statusDiv.textContent = message;
+        statusDiv.className = `${
+          isError ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+        } rounded-md p-4 mb-4`;
+        statusDiv.classList.remove("hidden");
+        setTimeout(() => {
+          statusDiv.classList.add("hidden");
+        }, 5000);
+      }
+
+      async function saveReminder(event) {
+        event.preventDefault();
+        try {
+          const className = document.getElementById("className").value;
+          const classTime = document.getElementById("classTime").value;
+
+          if (!className || !classTime) {
+            showStatus("Please fill in both class name and time", true);
+            return;
+          }
+
+          // Create form data
+          const formData = new FormData();
+          formData.append("name", className);
+          formData.append("time", classTime);
+
+          // Submit the form using XMLHttpRequest
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", SCRIPT_URL, true);
+          xhr.setRequestHeader(
+            "Content-Type",
+            "application/x-www-form-urlencoded"
+          );
+
+          xhr.onload = async function () {
+            if (xhr.status === 200) {
+              await scheduleLocalNotifications(classTime, className);
+              showStatus("Reminder saved successfully!");
+            } else {
+              throw new Error("Failed to save reminder");
+            }
+          };
+
+          xhr.onerror = function () {
+            showStatus("Failed to save reminder. Please try again.", true);
+          };
+
+          xhr.send(new URLSearchParams(formData).toString());
+        } catch (error) {
+          console.error("Error saving reminder:", error);
+          showStatus("Failed to save reminder. Please try again.", true);
+        }
+      }
+
+      async function scheduleLocalNotifications(classTime, className) {
+        try {
+          if (Notification.permission !== "granted") {
+            const permission = await Notification.requestPermission();
+            if (permission !== "granted") {
+              console.log("Notification permission denied");
+              return;
+            }
+          }
+
+          const times = [
+            8 * 60 * 60 * 1000,
+            16 * 60 * 60 * 1000,
+            24 * 60 * 60 * 1000,
+            32 * 60 * 60 * 1000,
+            40 * 60 * 60 * 1000,
+            48 * 60 * 60 * 1000,
+          ];
+
+          times.forEach((offset) => {
+            const notifyAt = new Date(new Date(classTime).getTime() + offset);
+            const now = Date.now();
+
+            if (notifyAt > now) {
+              setTimeout(() => {
+                showNotification(className, offset / (60 * 60 * 1000));
+              }, notifyAt - now);
+            }
+          });
+
+          // Last hour reminders
+          const lastHour = new Date(classTime).getTime() + 47 * 60 * 60 * 1000;
+          for (let i = 0; i < 6; i++) {
+            const notifyAt = new Date(lastHour + i * 10 * 60 * 1000);
+            const now = Date.now();
+
+            if (notifyAt > now) {
+              setTimeout(() => {
+                showNotification(className, "final hour", true);
+              }, notifyAt - now);
+            }
+          }
+        } catch (error) {
+          console.error("Error scheduling notifications:", error);
+        }
+      }
+
+      function showNotification(className, timeFrame, isFinalHour = false) {
+        if (Notification.permission === "granted") {
+          const title = isFinalHour ? "Final Hour Alert!" : "Feedback Reminder";
+          const body = isFinalHour
+            ? `Last chance to submit your feedback for ${className}!`
+            : `Time to check your feedback for ${className} (${timeFrame} hours after class)`;
+
+          new Notification(title, {
+            body: body,
+            icon: "icons/icon.png",
+            vibrate: [200, 100, 200],
+          });
+        }
+      }
+
+      async function submitFeedback() {
+        try {
+          const className = document.getElementById("className").value;
+
+          if (!className) {
+            showStatus("Please enter a class name", true);
+            return;
+          }
+
+          // Create form data
+          const formData = new FormData();
+          formData.append("action", "updateStatus");
+          formData.append("className", className);
+
+          // Submit using XMLHttpRequest
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", SCRIPT_URL, true);
+          xhr.setRequestHeader(
+            "Content-Type",
+            "application/x-www-form-urlencoded"
+          );
+
+          xhr.onload = function () {
+            if (xhr.status === 200) {
+              showStatus("Feedback submitted successfully!");
+            } else {
+              throw new Error("Failed to submit feedback");
+            }
+          };
+
+          xhr.onerror = function () {
+            showStatus("Failed to submit feedback. Please try again.", true);
+          };
+
+          xhr.send(new URLSearchParams(formData).toString());
+        } catch (error) {
+          console.error("Error submitting feedback:", error);
+          showStatus("Failed to submit feedback. Please try again.", true);
+        }
+      }
+
+      // Initialize event listeners
+      document.addEventListener("DOMContentLoaded", async () => {
+        updateNotificationStatus();
+        if ("Notification" in window && Notification.permission === "default") {
+          try {
+            await Notification.requestPermission();
+            updateNotificationStatus();
+          } catch (error) {
+            console.error("Error requesting notification permission:", error);
+          }
+        }
+
+        // Add form submit event listener
+        document
+          .getElementById("reminderForm")
+          .addEventListener("submit", saveReminder);
+
+        // Add feedback button event listener
+        document
+          .getElementById("submitFeedbackBtn")
+          .addEventListener("click", submitFeedback);
+      });
+    </script>
+  </body>
+</html>
